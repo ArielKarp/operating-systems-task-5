@@ -19,6 +19,8 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <ctype.h>
+#include <limits.h>
 
 
 
@@ -79,18 +81,19 @@ int main(int argc, char* argv[]) {
 
 	// check if server host is a valid IP
 	if (isIPAddr(server_host)) {
-		if (inet_pton(AF_INET, input_str, &(serv_addr.sin_addr)) != 1) { //; // TODO: check error
+		if (inet_pton(AF_INET, server_host, &(serv_addr.sin_addr)) != 1) { //; // TODO: check error
 			handle_error_exit("Error in inet_pton");
 		}
 	} else {
 		// this is a host name
 		// make this pretty
-		struct hostent *he;
-		if ( (he = gethostname(server_host) ) == NULL ) {
+		//struct hostent *he;
+		char host_name[HOST_NAME_MAX];
+		if ( gethostname(host_name, HOST_NAME_MAX) == -1 ) {
 			handle_error_exit("Hostname is invalid");
 		}
 		// copy address to server's struct
-		memcpy(&serv_addr.sin_addr, he->h_addr_list[0], he->h_length);
+		//memcpy(&serv_addr.sin_addr, he->h_addr_list[0], he->h_length);
 
 	}
 
@@ -124,7 +127,7 @@ int main(int argc, char* argv[]) {
 	if (bytes_read == -1) {
 		handle_error_exit("Failed reading from urandom");
 	}
-	bytes_read[len_to_read] = '\0';
+	read_buf[len_to_read] = '\0';
 
 	// write to server
 	int wrote_bytes = 0;
