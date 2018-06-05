@@ -88,12 +88,13 @@ int main(int argc, char* argv[]) {
 		// this is a host name
 		// make this pretty
 		//struct hostent *he;
-		char host_name[HOST_NAME_MAX];
-		if ( gethostname(host_name, HOST_NAME_MAX) == -1 ) {
+		//char host_name[HOST_NAME_MAX];
+		if ( gethostname(&serv_addr.sin_addr, HOST_NAME_MAX) == -1 ) {
 			handle_error_exit("Hostname is invalid");
 		}
 		// copy address to server's struct
 		//memcpy(&serv_addr.sin_addr, he->h_addr_list[0], he->h_length);
+
 
 	}
 
