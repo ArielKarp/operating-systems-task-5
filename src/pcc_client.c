@@ -89,13 +89,17 @@ int main(int argc, char* argv[]) {
 		// make this pretty
 		//struct hostent *he;
 		//char host_name[HOST_NAME_MAX];
-		if ( gethostname(&serv_addr.sin_addr, HOST_NAME_MAX) == -1 ) {
-			handle_error_exit("Hostname is invalid");
-		}
+//		if ( gethostname(&serv_addr.sin_addr, HOST_NAME_MAX) == -1 ) {
+//			handle_error_exit("Hostname is invalid");
+//		}
 		// copy address to server's struct
 		//memcpy(&serv_addr.sin_addr, he->h_addr_list[0], he->h_length);
-
-
+		struct hostent *he;
+		if ( (he = gethostbyname(server_host)) == NULL) {
+			handle_error_exit("Hostname is invalid");
+		}
+		//copy address to server's struct
+		memcpy(&serv_addr.sin_addr, he->h_addr_list[0], he->h_length);
 	}
 
 	// create client socket
@@ -124,11 +128,13 @@ int main(int argc, char* argv[]) {
 	}
 
 	// do a read
+	// TODO: assumre this read is good
 	int bytes_read = read(urand_fd, read_buf, len_to_read);
 	if (bytes_read == -1) {
 		handle_error_exit("Failed reading from urandom");
 	}
 	read_buf[len_to_read] = '\0';
+
 
 	// write to server
 	int wrote_bytes = 0;
@@ -142,25 +148,39 @@ int main(int argc, char* argv[]) {
 	}
 
 	// read from server
+
+	//************* Deprecated***************************************
+//	int read_bytes = 0;
+//	char read_server_buf[sizeof(unsigned int) + 1];
+//	memset(read_server_buf, 0, sizeof(read_server_buf));
+//	while (read_bytes < sizeof(unsigned int)) {
+//		int done_read = read(sockfd, read_server_buf + read_bytes, sizeof(unsigned int) - read_bytes);
+//		if (done_read == -1) {
+//			handle_error_exit("Failed to read from server");
+//		}
+//		read_bytes += done_read;
+//	}
+//	read_server_buf[sizeof(unsigned int)] = '\0';
+
+	// convert read from server to unsinged int
+	//rc = 0;
+	//unsigned int C = convertCharArrayToUsingedInt(read_server_buf, sizeof(read_server_buf), &rc);
+
+	int32_t in_val;
+	char* in_stream = (char*)&in_val;
+	int size_of_val = sizeof(in_val);
 	int read_bytes = 0;
-	char read_server_buf[sizeof(unsigned int) + 1];
-	memset(read_server_buf, 0, sizeof(read_server_buf));
-	while (read_bytes < sizeof(unsigned int)) {
-		int done_read = read(sockfd, read_server_buf + read_bytes, sizeof(unsigned int) - read_bytes);
+	int done_read = 0;
+	while (read_bytes < size_of_val) {
+		done_read = read(sockfd, in_stream + read_bytes, size_of_val - read_bytes);
 		if (done_read == -1) {
 			handle_error_exit("Failed to read from server");
 		}
 		read_bytes += done_read;
 	}
-	read_server_buf[sizeof(unsigned int)] = '\0';
 
-	// convert read from server to unsinged int
-	rc = 0;
-	unsigned int C = convertCharArrayToUsingedInt(read_server_buf, sizeof(read_server_buf), &rc);
-
-	if(!rc) {
-		//TODO: what if server transmitted not a number
-	}
+	// convert input to unsigned int
+	unsigned int C = ntohl(in_val);
 
 	printf("# of printable characters: %u\n", C);
 
