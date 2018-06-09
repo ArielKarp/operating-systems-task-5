@@ -52,7 +52,7 @@ unsigned int convertCharArrayToUsingedInt(char* input_arr, int size_of_arr, int*
 	return (strtoul(input_arr, NULL, 10));
 }
 
-void fromHostNameToIPAddr(char* hostname, char* ip) {
+void fromHostNameToIPAddr(char* hostname, struct sockaddr_in* out_addr) {
 	struct addrinfo hints;
 	struct addrinfo *servinfo;
 	struct addrinfo *pointer;
@@ -74,7 +74,8 @@ void fromHostNameToIPAddr(char* hostname, char* ip) {
 		// get address
 		h = (struct sockaddr_in *) pointer->ai_addr;
 		// copy to ip
-		strcpy(ip , inet_ntoa( h->sin_addr ) );
+		//strcpy(ip , inet_ntoa( h->sin_addr ) );
+		out_addr->sin_addr = h->sin_addr;
 	}
 	// free addrinfo
 	freeaddrinfo(servinfo);
@@ -123,7 +124,7 @@ int main(int argc, char* argv[]) {
 //		//copy address to server's struct
 //		memcpy(&serv_addr.sin_addr, he->h_addr_list[0], he->h_length);
 		//************* Deprecated***************************************
-		fromHostNameToIPAddr(server_host, &serv_addr.sin_addr);
+		fromHostNameToIPAddr(server_host, &serv_addr);
 	}
 
 	// create client socket
@@ -152,7 +153,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	// do a read
-	// TODO: assumre this read is good
+	// TODO: assume this read is good
 	int bytes_read = read(urand_fd, read_buf, len_to_read);
 	if (bytes_read == -1) {
 		handle_error_exit("Failed reading from urandom");
@@ -163,12 +164,12 @@ int main(int argc, char* argv[]) {
 	// writing to server
 
 	// sending size of message first
-	int32_t out_val = len_to_read;
+	int32_t out_val = htonl(len_to_read);
 	char* out_stream = (char*)&out_val;
 	int size_of_val = sizeof(out_val);
 	int wrote_bytes = 0;
 	int bytes_wrote = 0;
-	while (wrote_byts < size_of_val) {
+	while (wrote_bytes < size_of_val) {
 		bytes_wrote = write(sockfd, out_stream + wrote_bytes, size_of_val - wrote_bytes);
 		if (bytes_wrote == -1) {
 			handle_error_exit("Failed to write to server");
@@ -229,5 +230,6 @@ int main(int argc, char* argv[]) {
 
 
 	free(read_buf);
+	close(sockfd);
 	return EXIT_SUCCESS;
 }
