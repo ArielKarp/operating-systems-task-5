@@ -154,6 +154,7 @@ int main(int argc, char* argv[]) {
 
 	// do a read
 	// TODO: assume this read is good
+	// TODO: change read to remove buffer
 	int bytes_read = read(urand_fd, read_buf, len_to_read);
 	if (bytes_read == -1) {
 		handle_error_exit("Failed reading from urandom");

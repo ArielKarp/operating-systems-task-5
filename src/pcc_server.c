@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <string.h>
@@ -35,12 +36,13 @@ typedef struct {
 #define SIZE_OF_ARR				((UPPER_BOUND - LOWER_BOUND) + 1)
 
 // global variables
-int pcc_count[SIZE_OF_ARR];
-pthread_mutex_t mutex;
-int nThreads;
-int doLoop = 1;
+unsigned int pcc_count[SIZE_OF_ARR];
+pthread_mutex_t pcc_mutex;
+int nThreads = 0;
 int isShuttingDown = 0;
 pthread_t* threads = NULL;
+pthread_attr_t attr;
+int listenfd 	= -1;
 
 
 int handle_error_exit(const char* error_msg) {
@@ -64,14 +66,148 @@ unsigned int convertCharArrayToUsingedInt(char* input_arr, int size_of_arr, int*
 	return (strtoul(input_arr, NULL, 10));
 }
 
+unsigned int countArrIns(char* in_stream, unsigned int size_of_arr, unsigned int* out_arr) {
+	// count and returns the number of printable chars of in_stream
+	// update out_arr
+	char curr_char;
+	unsigned int count = 0;
+	for (int i = 0; i < size_of_arr; ++i) {
+		curr_char = in_stream[i];
+		if (curr_char >= LOWER_BOUND && curr_char <= UPPER_BOUND) {
+			// printable char
+			count++;
+			out_arr[curr_char - LOWER_BOUND]++;
+		}
+	}
+	return count;
+}
+
+void updatePccCount(unsigned int* in_arr) {
+	// in_arr and pcc_count have the same size
+	for (int i = 0; i < SIZE_OF_ARR; ++i) {
+		pcc_count[i] = pcc_count[i] +  in_arr[i];
+	}
+}
+
 void* pcc_client_thread(void* arg) {
 	int connfd = ((threadInfo*) arg)->connfd;
 
 	// read len from client
+	int32_t in_val;
+	char* in_stream = (char*)&in_val;
+	int size_of_val = sizeof(in_val);
+	int read_bytes = 0;
+	int done_read = 0;
+	while (read_bytes < size_of_val) {
+		done_read = read(connfd, in_stream + read_bytes, size_of_val - read_bytes);
+		if (done_read == -1) {
+			handle_error_exit("Failed to read from client");
+		}
+		read_bytes += done_read;
+	}
+
+	// set message to read
+	unsigned int size_to_read = ntohl(in_val);
+	char* message_to_read = malloc(size_to_read * sizeof(char));
+	if (message_to_read == NULL) {
+		handle_error_exit("Failed to allocate memory");
+	}
+
 	// read message from client
+	read_bytes = 0;
+	done_read = 0;
+	while (read_bytes < size_to_read) {
+		done_read = read(connfd, message_to_read + read_bytes, size_to_read - read_bytes);
+		if (done_read == -1) {
+			handle_error_exit("Failed to read from client");
+		}
+		read_bytes += done_read;
+	}
+
 	// count number of valid instances
+	unsigned int* local_pcc = calloc(SIZE_OF_ARR, sizeof(unsigned int));
+	if (local_pcc == NULL) {
+		handle_error_exit("Failed to allocate memory");
+	}
+
+	unsigned int r_value = countArrIns(message_to_read, size_to_read, local_pcc);
+
+	// return value to client
+	int32_t out_val = htonl(r_value);
+	char* out_stream = (char*)&out_val;
+	size_of_val = sizeof(out_val);
+	int wrote_bytes = 0;
+	int bytes_wrote = 0;
+	while (wrote_bytes < size_of_val) {
+		bytes_wrote = write(connfd, out_stream + wrote_bytes, size_of_val - wrote_bytes);
+		if (bytes_wrote == -1) {
+			handle_error_exit("Failed to write to client");
+		}
+		wrote_bytes += bytes_wrote;
+	}
+
+	// lock mutex
+	if (pthread_mutex_lock(&pcc_mutex) != 0) {
+		// lock mutex
+		handle_error_exit("Failed to lock the mutex");
+	}
+	// mutex is locked
 	// update array
+	updatePccCount(local_pcc);
+
+	// unlock mutex
+	if (pthread_mutex_unlock(&pcc_mutex) != 0) {
+		handle_error_exit("Failed to unlock the mutex");
+	}
+
 	// exit gracefully
+	close(connfd);
+	free(local_pcc);
+	free(message_to_read);
+	free((threadInfo*) arg);
+	pthread_exit(NULL);
+}
+
+void prettyPricePccArr() {
+	printf("\n");  // flush stdout
+	for (int i = 0; i < SIZE_OF_ARR; ++i) {
+		printf("char '%c' : %u times\n", i + LOWER_BOUND, pcc_count[i]);
+	}
+}
+
+void signal_int_handler(int signum) {
+	// stop accepting connections
+	// TODO: maybe mutex this
+	isShuttingDown = 1;
+	close(listenfd);
+
+	// join all threads
+	for (int i = 0; i < nThreads; ++i) {
+		if (pthread_join(threads[i], NULL) != 0) {
+			handle_error_exit("Failed to join a thread");
+		}
+	}
+
+	// print pcc counters
+	prettyPricePccArr();
+
+	// exit gracefully
+	if (pthread_attr_destroy(&attr) != 0) {
+		handle_error_exit("Failed to destroy attr");
+	}
+	if (pthread_mutex_destroy(&pcc_mutex) != 0) {
+		handle_error_exit("Failed to destroy mutex");
+	}
+
+	free(threads);
+	exit(EXIT_SUCCESS);
+}
+
+int register_signal_int_handling() {
+	struct sigaction new_int_action;
+	memset(&new_int_action, 0, sizeof(new_int_action));
+	new_int_action.sa_handler = signal_int_handler;
+	return sigaction(SIGINT, &new_int_action, NULL);
 }
 
 int main(int argc, char* argv[]) {
@@ -80,15 +216,19 @@ int main(int argc, char* argv[]) {
 		handle_error_exit("Wrong number of input arguments");
 	}
 
-	int sockfd		= -1;
+	if (register_signal_int_handling() != 0) {
+		handle_error_exit("Failed to register sigint handler");
+	}
+
 	int rc 			= 0;
-	int listenfd 	= -1;
 	int connfd		= -1;
 	struct sockaddr_in serv_addr;
 	socklen_t addrsize = sizeof(struct sockaddr_in);
-	pthread_attr_t attr;
 
-	int16_t server_port = convertCharArrayToUsingedInt(argv[2], strlen(argv[2]), &rc);
+	// clear pcc_count
+	memset(pcc_count, 0, SIZE_OF_ARR * sizeof(unsigned int));
+
+	int16_t server_port = convertCharArrayToUsingedInt(argv[1], strlen(argv[1]), &rc);
 	if (!rc) {
 		handle_error_exit("Wrong port number");
 	}
@@ -110,12 +250,12 @@ int main(int argc, char* argv[]) {
 	}
 
 	// start listening
-	if ( listen(listenfd, NUMBER_OF_LISTENERS) != 0) {
+	if (listen(listenfd, NUMBER_OF_LISTENERS) != 0) {
 		handle_error_exit("Failed to starting listening");
 	}
 
 	// init mutex and attr
-	if (pthread_mutex_init(&mutex, NULL) != 0) {
+	if (pthread_mutex_init(&pcc_mutex, NULL) != 0) {
 		handle_error_exit("Failed to init mutex");
 	}
 	if (pthread_attr_init(&attr) != 0) {
@@ -124,30 +264,30 @@ int main(int argc, char* argv[]) {
 	if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE) != 0) {
 		handle_error_exit("Failed to set detach state");
 	}
-
-	while (doLoop) {
+	while (1) {
 		connfd = accept(listenfd, NULL, NULL);
 		if (connfd < 0) {
 			handle_error_exit("Failed to accept connection");
 		}
-		if (isShuttingDown) {  // shutting down, finish looping..
-			doLoop = 0;
-			break;
-		}
-		// create a new thread
-		// realloc safely
-		pthread_t new_threads = realloc(threads, (++nThreads)*sizeof(pthread_t));
-		if (new_threads == NULL) {
-			handle_error_exit("Failed to realloc");
-		}
-		threads = new_threads;
-		threadInfo* pcc_info = malloc(sizeof(threadInfo));
-		if (pcc_info == NULL) {
-			handle_error_exit("Failed to allocate threadInfo struct");
-		}
-		pcc_info->connfd = connfd;
-		if (pthread_create(&threads[nThreads-1], &attr, pcc_client_thread, (void*) pcc_info) != 0) {
-			handle_error_exit("Failed creating a thread");
+
+		if (!isShuttingDown) {  // shutting down, finish looping..
+			// create a new thread
+			// realloc safely
+			pthread_t* new_threads = realloc(threads, (++nThreads)*sizeof(pthread_t));
+			if (new_threads == NULL) {
+				handle_error_exit("Failed to realloc");
+			}
+			threads = new_threads;
+			threadInfo* pcc_info = malloc(sizeof(threadInfo));
+			if (pcc_info == NULL) {
+				handle_error_exit("Failed to allocate threadInfo struct");
+			}
+			pcc_info->connfd = connfd;
+			if (pthread_create(&threads[nThreads-1], &attr, pcc_client_thread, (void*) pcc_info) != 0) {
+				handle_error_exit("Failed creating a thread");
+			}
+		} else {
+			close(connfd);
 		}
 	}
 
