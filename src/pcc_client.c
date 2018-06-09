@@ -52,6 +52,34 @@ unsigned int convertCharArrayToUsingedInt(char* input_arr, int size_of_arr, int*
 	return (strtoul(input_arr, NULL, 10));
 }
 
+void fromHostNameToIPAddr(char* hostname, char* ip) {
+	struct addrinfo hints;
+	struct addrinfo *servinfo;
+	struct addrinfo *pointer;
+	struct sockaddr_in *h;
+	int rc;
+
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+
+	if ( (rc = getaddrinfo(hostname, NULL, &hints, &servinfo)) != 0)
+	{
+		handle_error_exit("Failed to getaddrinfo");
+	}
+
+	// loop through all the results and connect to the first we can
+	for(pointer = servinfo; pointer != NULL; pointer = pointer->ai_next)
+	{
+		// get address
+		h = (struct sockaddr_in *) pointer->ai_addr;
+		// copy to ip
+		strcpy(ip , inet_ntoa( h->sin_addr ) );
+	}
+	// free addrinfo
+	freeaddrinfo(servinfo);
+}
+
 int main(int argc, char* argv[]) {
 	// get input from user
 	if (argc != 4) {
@@ -86,20 +114,16 @@ int main(int argc, char* argv[]) {
 		}
 	} else {
 		// this is a host name
-		// make this pretty
-		//struct hostent *he;
-		//char host_name[HOST_NAME_MAX];
-//		if ( gethostname(&serv_addr.sin_addr, HOST_NAME_MAX) == -1 ) {
+		// TODO: make this pretty
+		//************* Deprecated***************************************
+//		struct hostent *he;
+//		if ( (he = gethostbyname(server_host)) == NULL) {
 //			handle_error_exit("Hostname is invalid");
 //		}
-		// copy address to server's struct
-		//memcpy(&serv_addr.sin_addr, he->h_addr_list[0], he->h_length);
-		struct hostent *he;
-		if ( (he = gethostbyname(server_host)) == NULL) {
-			handle_error_exit("Hostname is invalid");
-		}
-		//copy address to server's struct
-		memcpy(&serv_addr.sin_addr, he->h_addr_list[0], he->h_length);
+//		//copy address to server's struct
+//		memcpy(&serv_addr.sin_addr, he->h_addr_list[0], he->h_length);
+		//************* Deprecated***************************************
+		fromHostNameToIPAddr(server_host, &serv_addr.sin_addr);
 	}
 
 	// create client socket
@@ -136,10 +160,26 @@ int main(int argc, char* argv[]) {
 	read_buf[len_to_read] = '\0';
 
 
-	// write to server
+	// writing to server
+
+	// sending size of message first
+	int32_t out_val = len_to_read;
+	char* out_stream = (char*)&out_val;
+	int size_of_val = sizeof(out_val);
 	int wrote_bytes = 0;
+	int bytes_wrote = 0;
+	while (wrote_byts < size_of_val) {
+		bytes_wrote = write(sockfd, out_stream + wrote_bytes, size_of_val - wrote_bytes);
+		if (bytes_wrote == -1) {
+			handle_error_exit("Failed to write to server");
+		}
+		wrote_bytes += bytes_wrote;
+	}
+
+	// send message
+	wrote_bytes = 0;
 	while (wrote_bytes < len_to_read) {
-		int bytes_wrote = write(sockfd, read_buf + wrote_bytes, len_to_read - wrote_bytes);
+		bytes_wrote = write(sockfd, read_buf + wrote_bytes, len_to_read - wrote_bytes);
 		if (bytes_wrote == -1) {
 			handle_error_exit("Failed to write to server");
 		}
@@ -147,7 +187,7 @@ int main(int argc, char* argv[]) {
 
 	}
 
-	// read from server
+
 
 	//************* Deprecated***************************************
 //	int read_bytes = 0;
@@ -165,10 +205,13 @@ int main(int argc, char* argv[]) {
 	// convert read from server to unsinged int
 	//rc = 0;
 	//unsigned int C = convertCharArrayToUsingedInt(read_server_buf, sizeof(read_server_buf), &rc);
+	//************* Deprecated***************************************
+
+	// read from server
 
 	int32_t in_val;
 	char* in_stream = (char*)&in_val;
-	int size_of_val = sizeof(in_val);
+	size_of_val = sizeof(in_val);
 	int read_bytes = 0;
 	int done_read = 0;
 	while (read_bytes < size_of_val) {
