@@ -23,6 +23,8 @@
 #include <limits.h>
 
 
+#define MESSAGE_BLOCK 1024
+
 
 int handle_error_exit(const char* error_msg) {
 	int errsv = errno;
@@ -33,6 +35,15 @@ int handle_error_exit(const char* error_msg) {
 	}
 	exit(errsv);
 }
+
+int my_ceil(float num) {
+	int integet_num = (int) num;
+	if (num == (float) integet_num) {
+		return integet_num;
+	}
+	return integet_num + 1;
+}
+
 
 int isIPAddr(const char* input_str) {
 	struct sockaddr_in sa;
@@ -146,7 +157,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	// read len_of_read bytes from urandom
-	char* read_buf = calloc((len_to_read + 1), sizeof(char));
+	char* read_buf = calloc(MESSAGE_BLOCK, sizeof(char));
 
 	if (read_buf == NULL) {
 		handle_error_exit("Failed to allocate memory for read buffer");
@@ -155,11 +166,11 @@ int main(int argc, char* argv[]) {
 	// do a read
 	// TODO: assume this read is good
 	// TODO: change read to remove buffer
-	int bytes_read = read(urand_fd, read_buf, len_to_read);
-	if (bytes_read == -1) {
-		handle_error_exit("Failed reading from urandom");
-	}
-	read_buf[len_to_read] = '\0';
+//	int bytes_read = read(urand_fd, read_buf, len_to_read);
+//	if (bytes_read == -1) {
+//		handle_error_exit("Failed reading from urandom");
+//	}
+//	read_buf[len_to_read] = '\0';
 
 
 	// writing to server
@@ -180,15 +191,35 @@ int main(int argc, char* argv[]) {
 
 	// send message
 	wrote_bytes = 0;
-	while (wrote_bytes < len_to_read) {
-		bytes_wrote = write(sockfd, read_buf + wrote_bytes, len_to_read - wrote_bytes);
-		if (bytes_wrote == -1) {
-			handle_error_exit("Failed to write to server");
+	int bytes_read = 0;
+	unsigned left_to_read = len_to_read;
+	// get number of iterations
+	int num_of_iter = my_ceil( ((float)len_to_read) / MESSAGE_BLOCK);
+	for (int i = 0; i < num_of_iter; ++i) {
+		// read a block from urandom
+		if (left_to_read > MESSAGE_BLOCK) {
+			bytes_read = read(urand_fd, read_buf, MESSAGE_BLOCK);
+			left_to_read -= MESSAGE_BLOCK;
+		} else {
+			bytes_read = read(urand_fd, read_buf, left_to_read);  // last read
 		}
-		wrote_bytes += bytes_wrote;
+		if (bytes_read == -1) {
+			handle_error_exit("Failed reading from urandom");
+		}
+		read_buf[bytes_read] = '\0';
 
+		wrote_bytes = 0;
+		while (wrote_bytes < bytes_read) {
+			// reading MESSAGE_BLOCK from urandom
+			bytes_wrote = write(sockfd, read_buf + wrote_bytes, bytes_read - wrote_bytes);
+			if (bytes_wrote == -1) {
+				handle_error_exit("Failed to write to server");
+			}
+			wrote_bytes += bytes_wrote;
+		}
+		// clear buffer
+		memset(read_buf, 0, MESSAGE_BLOCK * sizeof(char));
 	}
-
 
 
 	//************* Deprecated***************************************
