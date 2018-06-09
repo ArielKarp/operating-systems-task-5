@@ -84,8 +84,7 @@ void fromHostNameToIPAddr(char* hostname, struct sockaddr_in* out_addr) {
 	{
 		// get address
 		h = (struct sockaddr_in *) pointer->ai_addr;
-		// copy to ip
-		//strcpy(ip , inet_ntoa( h->sin_addr ) );
+		// copy to out_addr
 		out_addr->sin_addr = h->sin_addr;
 	}
 	// free addrinfo
@@ -121,20 +120,11 @@ int main(int argc, char* argv[]) {
 
 	// check if server host is a valid IP
 	if (isIPAddr(server_host)) {
-		if (inet_pton(AF_INET, server_host, &(serv_addr.sin_addr)) != 1) { //; // TODO: check error
+		if (inet_pton(AF_INET, server_host, &(serv_addr.sin_addr)) != 1) { // TODO: check error
 			handle_error_exit("Error in inet_pton");
 		}
 	} else {
 		// this is a host name
-		// TODO: make this pretty
-		//************* Deprecated***************************************
-//		struct hostent *he;
-//		if ( (he = gethostbyname(server_host)) == NULL) {
-//			handle_error_exit("Hostname is invalid");
-//		}
-//		//copy address to server's struct
-//		memcpy(&serv_addr.sin_addr, he->h_addr_list[0], he->h_length);
-		//************* Deprecated***************************************
 		fromHostNameToIPAddr(server_host, &serv_addr);
 	}
 
@@ -163,16 +153,6 @@ int main(int argc, char* argv[]) {
 		handle_error_exit("Failed to allocate memory for read buffer");
 	}
 
-	// do a read
-	// TODO: assume this read is good
-	// TODO: change read to remove buffer
-//	int bytes_read = read(urand_fd, read_buf, len_to_read);
-//	if (bytes_read == -1) {
-//		handle_error_exit("Failed reading from urandom");
-//	}
-//	read_buf[len_to_read] = '\0';
-
-
 	// writing to server
 
 	// sending size of message first
@@ -190,9 +170,8 @@ int main(int argc, char* argv[]) {
 	}
 
 	// send message
-	wrote_bytes = 0;
 	int bytes_read = 0;
-	unsigned left_to_read = len_to_read;
+	unsigned int left_to_read = len_to_read;
 	// get number of iterations
 	int num_of_iter = my_ceil( ((float)len_to_read) / MESSAGE_BLOCK);
 	for (int i = 0; i < num_of_iter; ++i) {
@@ -220,25 +199,6 @@ int main(int argc, char* argv[]) {
 		// clear buffer
 		memset(read_buf, 0, MESSAGE_BLOCK * sizeof(char));
 	}
-
-
-	//************* Deprecated***************************************
-//	int read_bytes = 0;
-//	char read_server_buf[sizeof(unsigned int) + 1];
-//	memset(read_server_buf, 0, sizeof(read_server_buf));
-//	while (read_bytes < sizeof(unsigned int)) {
-//		int done_read = read(sockfd, read_server_buf + read_bytes, sizeof(unsigned int) - read_bytes);
-//		if (done_read == -1) {
-//			handle_error_exit("Failed to read from server");
-//		}
-//		read_bytes += done_read;
-//	}
-//	read_server_buf[sizeof(unsigned int)] = '\0';
-
-	// convert read from server to unsinged int
-	//rc = 0;
-	//unsigned int C = convertCharArrayToUsingedInt(read_server_buf, sizeof(read_server_buf), &rc);
-	//************* Deprecated***************************************
 
 	// read from server
 
