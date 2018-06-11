@@ -103,7 +103,7 @@ int main(int argc, char* argv[]) {
 	struct sockaddr_in serv_addr; // where we want to get to
 
 	char* server_host = argv[1];
-	int16_t server_port = convertCharArrayToUsingedInt(argv[2], strlen(argv[2]), &rc);
+	uint16_t server_port = convertCharArrayToUsingedInt(argv[2], strlen(argv[2]), &rc);
 	if (!rc) {
 		handle_error_exit("Wrong port number");
 	}
@@ -120,7 +120,7 @@ int main(int argc, char* argv[]) {
 
 	// check if server host is a valid IP
 	if (isIPAddr(server_host)) {
-		if (inet_pton(AF_INET, server_host, &(serv_addr.sin_addr)) != 1) { // TODO: check error
+		if (inet_pton(AF_INET, server_host, &(serv_addr.sin_addr)) != 1) {
 			handle_error_exit("Error in inet_pton");
 		}
 	} else {

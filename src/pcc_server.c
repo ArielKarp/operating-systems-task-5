@@ -25,6 +25,7 @@
 #include <limits.h>
 #include <pthread.h>
 
+
 typedef struct {
 	int connfd;
 } threadInfo;
@@ -175,7 +176,7 @@ void prettyPricePccArr() {
 	}
 }
 
-void signal_int_handler(int signum) {
+void handle_resources() {
 	// stop accepting connections
 	// TODO: maybe mutex this
 	isShuttingDown = 1;
@@ -200,6 +201,10 @@ void signal_int_handler(int signum) {
 	}
 
 	free(threads);
+}
+
+void signal_int_handler(int signum) {
+	handle_resources();
 	exit(EXIT_SUCCESS);
 }
 
@@ -291,6 +296,6 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	// TODO: sould not get here
+	handle_resources();
 	return EXIT_SUCCESS;
 }
