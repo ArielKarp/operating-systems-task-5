@@ -156,7 +156,7 @@ int main(int argc, char* argv[]) {
 	// writing to server
 
 	// sending size of message first
-	int32_t out_val = htonl(len_to_read);
+	uint32_t out_val = htonl(len_to_read);
 	char* out_stream = (char*)&out_val;
 	int size_of_val = sizeof(out_val);
 	int wrote_bytes = 0;
