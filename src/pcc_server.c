@@ -56,8 +56,8 @@ int handle_error_exit(const char* error_msg) {
 	exit(errsv);
 }
 
-unsigned int convertCharArrayToUsingedInt(char* input_arr, int size_of_arr, int* success) {
-	for(int i = 0; i < size_of_arr; ++i) {
+unsigned int convertCharArrayToUsingedInt(char* input_arr, unsigned int size_of_arr, int* success) {
+	for(unsigned int i = 0; i < size_of_arr; ++i) {
 		if(!isdigit(input_arr[i])) {
 			*success = 0;
 			return 0;
@@ -72,7 +72,7 @@ unsigned int countArrIns(char* in_stream, unsigned int size_of_arr, unsigned int
 	// update out_arr
 	char curr_char;
 	unsigned int count = 0;
-	for (int i = 0; i < size_of_arr; ++i) {
+	for (unsigned int i = 0; i < size_of_arr; ++i) {
 		curr_char = in_stream[i];
 		if (curr_char >= LOWER_BOUND && curr_char <= UPPER_BOUND) {
 			// printable char
@@ -94,7 +94,7 @@ void* pcc_client_thread(void* arg) {
 	int connfd = ((threadInfo*) arg)->connfd;
 
 	// read len from client
-	int32_t in_val;
+	uint32_t in_val;
 	char* in_stream = (char*)&in_val;
 	int size_of_val = sizeof(in_val);
 	int read_bytes = 0;
@@ -134,7 +134,7 @@ void* pcc_client_thread(void* arg) {
 	unsigned int r_value = countArrIns(message_to_read, size_to_read, local_pcc);
 
 	// return value to client
-	int32_t out_val = htonl(r_value);
+	uint32_t out_val = htonl(r_value);
 	char* out_stream = (char*)&out_val;
 	size_of_val = sizeof(out_val);
 	int wrote_bytes = 0;
@@ -169,7 +169,7 @@ void* pcc_client_thread(void* arg) {
 	pthread_exit(NULL);
 }
 
-void prettyPricePccArr() {
+void prettyPrintPccArr() {
 	printf("\n");  // flush stdout
 	for (int i = 0; i < SIZE_OF_ARR; ++i) {
 		printf("char '%c' : %u times\n", i + LOWER_BOUND, pcc_count[i]);
@@ -178,7 +178,6 @@ void prettyPricePccArr() {
 
 void handle_resources() {
 	// stop accepting connections
-	// TODO: maybe mutex this
 	isShuttingDown = 1;
 	close(listenfd);
 
@@ -190,7 +189,7 @@ void handle_resources() {
 	}
 
 	// print pcc counters
-	prettyPricePccArr();
+	prettyPrintPccArr();
 
 	// exit gracefully
 	if (pthread_attr_destroy(&attr) != 0) {
@@ -233,13 +232,20 @@ int main(int argc, char* argv[]) {
 	// clear pcc_count
 	memset(pcc_count, 0, SIZE_OF_ARR * sizeof(unsigned int));
 
-	int16_t server_port = convertCharArrayToUsingedInt(argv[1], strlen(argv[1]), &rc);
+	uint16_t server_port = convertCharArrayToUsingedInt(argv[1], strlen(argv[1]), &rc);
 	if (!rc) {
 		handle_error_exit("Wrong port number");
 	}
 
 	if ((listenfd = socket( AF_INET, SOCK_STREAM, 0)) < 0) {
 		handle_error_exit("Could not create socket to listen");
+	}
+
+
+	// allow reuse of socket
+	int reuse = 1;
+	if ( setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0) {
+		handle_error_exit("Failed to set socket reuseadd");
 	}
 
 	// get serv_addr ready
@@ -275,7 +281,7 @@ int main(int argc, char* argv[]) {
 			handle_error_exit("Failed to accept connection");
 		}
 
-		if (!isShuttingDown) {  // shutting down, finish looping..
+		if (!isShuttingDown) {  // not shutting down
 			// create a new thread
 			// realloc safely
 			pthread_t* new_threads = realloc(threads, (++nThreads)*sizeof(pthread_t));
