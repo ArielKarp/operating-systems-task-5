@@ -52,8 +52,8 @@ int isIPAddr(const char* input_str) {
 	return rc != 0;
 }
 
-unsigned int convertCharArrayToUsingedInt(char* input_arr, int size_of_arr, int* success) {
-	for(int i = 0; i < size_of_arr; ++i) {
+unsigned int convertCharArrayToUsingedInt(char* input_arr, unsigned int size_of_arr, int* success) {
+	for(unsigned int i = 0; i < size_of_arr; ++i) {
 		if(!isdigit(input_arr[i])) {
 			*success = 0;
 			return 0;
@@ -173,8 +173,8 @@ int main(int argc, char* argv[]) {
 	int bytes_read = 0;
 	unsigned int left_to_read = len_to_read;
 	// get number of iterations
-	int num_of_iter = my_ceil( ((float)len_to_read) / MESSAGE_BLOCK);
-	for (int i = 0; i < num_of_iter; ++i) {
+	unsigned int num_of_iter = my_ceil( ((float)len_to_read) / MESSAGE_BLOCK);
+	for (unsigned int i = 0; i < num_of_iter; ++i) {
 		// read a block from urandom
 		if (left_to_read > MESSAGE_BLOCK) {
 			bytes_read = read(urand_fd, read_buf, MESSAGE_BLOCK);
@@ -202,7 +202,7 @@ int main(int argc, char* argv[]) {
 
 	// read from server
 
-	int32_t in_val;
+	uint32_t in_val;
 	char* in_stream = (char*)&in_val;
 	size_of_val = sizeof(in_val);
 	int read_bytes = 0;
@@ -219,7 +219,6 @@ int main(int argc, char* argv[]) {
 	unsigned int C = ntohl(in_val);
 
 	printf("# of printable characters: %u\n", C);
-
 
 	free(read_buf);
 	close(sockfd);
